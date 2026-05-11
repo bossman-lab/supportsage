@@ -1,0 +1,10 @@
+{
+    "name": "SupportSage",
+    "version": "0.1.0",
+    "description": "AI-optimized support structures — load SupportSage strategies directly into Cura",
+    "author": "bossman-lab",
+    "api": 8,
+    "supported_sdk_versions": ["8.0.0", "8.1.0", "8.2.0", "8.3.0", "8.4.0", "8.5.0"],
+    "website": "https://github.com/bossman-lab/supportsage",
+    "license": "MIT"
+}
