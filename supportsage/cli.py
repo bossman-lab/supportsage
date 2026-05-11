@@ -16,6 +16,7 @@ from pathlib import Path
 from . import __version__
 from .analyzer import full_analysis
 from .optimizer import generate_support_strategy, generate_support_geometry
+from .tree_supports import add_tree_parser, tree_command
 
 
 def main():
@@ -79,6 +80,9 @@ Examples:
         help="Output file path (default: stdout)"
     )
 
+    # tree
+    tree_parser = add_tree_parser(subparsers)
+
     args = parser.parse_args()
 
     if args.command == "analyze":
@@ -87,6 +91,8 @@ Examples:
         _cmd_optimize(args)
     elif args.command == "export":
         _cmd_export(args)
+    elif args.command == "tree":
+        tree_command(args)
     else:
         parser.print_help()
         sys.exit(1)
