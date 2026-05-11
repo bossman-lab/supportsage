@@ -1,0 +1,11 @@
+.gitignore
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.venv/
+.DS_Store
+*.stl
+!tests/fixtures/*.stl
+README.md.sha
