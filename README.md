@@ -13,31 +13,36 @@ SupportSage analyzes your STL model and generates **intelligent, geometry-aware 
 > _"I spent more time removing supports than the actual print took."_
 > — Every 3D printing hobbyist at some point
 
-Traditional slicers (Cura, PrusaSlicer, OrcaSlicer) use **rule-based support generation** — simple overhang angle thresholds applied uniformly. This leads to:
-- **Over-supported** areas that waste material and leave ugly scars
-- **Under-supported** areas that sag or collapse mid-print
-- **No per-geometry intelligence** — every model gets the same treatment
-
-## The Solution
-
-SupportSage uses geometric analysis + AI to decide:
-- **Where** supports are actually needed (not just where the angle exceeds a threshold)
-- **What type** of support (tree vs. standard, density, pattern) is optimal for each region
-- **How to orient** branches to minimize material while maintaining stability
-
----
+```
+STL input → trimesh mesh
+     ↓
+Overhang detection (face normal × Z-up dot product)
+     ↓
+Severity classification (critical / moderate / borderline)
+     ↓
+Island detection (disconnected region BFS)
+     ↓
+Per-island strategy (tree vs. heavy_interface vs. minimal)
+     ↓
+★ Tree support generation (branching organic structures)
+     ↓
+Support geometry → output STL
+```
 
 ## Quick Start
 
 ```bash
 # Install
-pip install supportsage
+cd supportsage && pip install -e .
 
 # Analyze a model for overhang areas
 supportsage analyze model.stl
 
-# Generate optimized supports
-supportsage optimize model.stl -o model_with_supports.stl --strategy ai
+# Generate optimized tree supports (NEW!)
+supportsage tree model.stl -o optimized.stl --strategy balanced
+
+# Generate pillar supports
+supportsage optimize model.stl -o model_with_supports.stl --strategy balanced
 
 # Export as G-code overlay for your slicer
 supportsage export model.stl --format cura-json
