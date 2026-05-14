@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportSage — 3D Print Analyzer + FilamentDB + Printsight</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --surface2: #1a1a1a;
+    --surface3: #222;
+    --accent: #d4a747;
+    --accent-dim: #a07830;
+    --accent-glow: rgba(212,167,71,.15);
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --text-muted: #555;
+    --critical: #ff3333;
+    --moderate: #ff8800;
+    --borderline: #ffcc00;
+    --safe: #22cc66;
+    --info: #4488ff;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid #222;
+    z-index: 10;
+    flex-shrink: 0;
+    position: sticky; top: 0;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 20px; font-weight: 700;
+    color: var(--accent);
+  }
+  .logo span { font-size: 24px; }
+  .logo small { font-size: 12px; color: var(--text-dim); font-weight: 400; margin-left: 4px; }
+  header nav { display: flex; gap: 12px; align-items: center; }
+  .badge {
+    background: var(--accent); color: #000; padding: 2px 10px;
+    border-radius: 99px; font-size: 11px; font-weight: 600;
+  }
+  .version-badge {
+    background: var(--surface3); color: var(--text-dim); padding: 3px 10px;
+    border-radius: 99px; font-size: 11px; border: 1px solid #333;
+  }
+
+  /* ── Main Layout ── */
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    flex: 1;
+  }
+
+  /* ── Section Cards ── */
+  .section {
+    background: var(--surface);
+    border: 1px solid #222;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .section-header {
+    padding: 16px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid #222;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+  }
+  .section-header .icon { font-size: 18px; }
+  .section-body { padding: 20px; }
+
+  /* ── Upload Zone ── */
+  .upload-zone {
+    border: 2px dashed #333;
+    border-radius: var(--radius-sm);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .3s;
+    background: transparent;
+  }
+  .upload-zone:hover,
+  .upload-zone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+  .upload-zone h4 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .upload-zone p { color: var(--text-dim); font-size: 13px; }
+  .file-info {
+    display: none;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+    align-items: center;
+    justify-content: space-between;
+  }
+  .file-info.visible { display: flex; }
+  .file-info .label { display: flex; align-items: center; gap: 8px; }
+  .file-info .remove {
+    color: var(--critical); cursor: pointer; font-size: 18px;
+    background: none; border: none; padding: 4px;
+  }
+
+  /* ── Form elements ── */
+  .input-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .input-group input {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border: 1px solid #333;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .input-group input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+  }
+  .input-group input::placeholder { color: var(--text-muted); }
+
+  .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+  .btn-primary:hover { background: #c89a35; }
+  .btn-primary:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: var(--surface3);
+    color: var(--text);
+    border: 1px solid #333;
+  }
+  .btn-secondary:hover { background: #2a2a2a; }
+  .btn-danger {
+    background: transparent;
+    color: var(--critical);
+    border: 1px solid var(--critical);
+  }
+  .btn-danger:hover { background: rgba(255,51,51,.1); }
+
+  /* ── Results Cards ── */
+  .results-area {
+    display: none;
+    margin-top: 12px;
+  }
+  .results-area.visible { display: block; }
+
+  .result-card {
+    background: var(--surface2);
+    border: 1px solid #2a2a2a;
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    margin-bottom: 8px;
+  }
+  .result-card:last-child { margin-bottom: 0; }
+  .result-card h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--accent);
+  }
+  .result-detail {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .result-detail strong { color: var(--text); }
+
+  .temp-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+  }
+  .temp-badge {
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .temp-badge.nozzle {
+    background: rgba(255,51,51,.15);
+    color: #ff6666;
+    border: 1px solid rgba(255,51,51,.3);
+  }
+  .temp-badge.bed {
+    background: rgba(68,136,255,.15);
+    color: #6699ff;
+    border: 1px solid rgba(68,136,255,.3);
+  }
+
+  .quality-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .quality-score.good { background: rgba(34,204,102,.15); color: var(--safe); }
+  .quality-score.warning { background: rgba(255,204,0,.15); color: var(--borderline); }
+  .quality-score.bad { background: rgba(255,51,51,.15); color: var(--critical); }
+
+  /* ── Loading ── */
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid #333;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-row {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--text-dim); font-size: 13px;
+    padding: 8px 0;
+  }
+
+  .error-box {
+    background: rgba(255,51,51,.1);
+    border: 1px solid rgba(255,51,51,.3);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    color: var(--critical);
+    font-size: 13px;
+    margin-top: 8px;
+  }
+
+  /* ── Grid for results ── */
+  .result-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .result-grid .item {
+    background: var(--surface3);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+  }
+  .result-grid .item .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--text-muted);
+  }
+  .result-grid .item .value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 2px;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    header { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }
+    .container { padding: 16px; }
+    .input-group { flex-direction: column; }
+    .result-grid { grid-template-columns: 1fr; }
+    .temp-row { flex-wrap: wrap; }
+  }
+
+  /* ── Print image preview ── */
+  .image-preview {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #333;
+    margin-top: 12px;
+    display: none;
+  }
+  .image-preview.visible { display: block; }
+
+  /* ── Status indicator ── */
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+    margin-right: 4px;
+  }
+  .status-dot.online { background: var(--safe); }
+  .status-dot.offline { background: var(--critical); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span>🧠</span>
+    SupportSage
+    <small id="versionDisplay">v0.1.0</small>
+  </div>
+  <nav>
+    <span class="version-badge" id="versionBadge">
+      <span class="status-dot online" id="statusDot"></span>
+      <span id="statusText">connected</span>
+    </span>
+    <span class="badge">BETA</span>
+  </nav>
+</header>
+
+<div class="container">
+
+  <!-- ═══════════ STL Upload ═══════════ -->
+  <div class="section" id="stlSection">
+    <div class="section-header">
+      <span class="icon">📐</span> STL File Upload
+      <span style="margin-left:auto;font-size:11px;color:var(--text-muted);font-weight:400;">Analyze overhangs &amp; generate supports</span>
+    </div>
+    <div class="section-body">
+      <div class="upload-zone" id="stlDropZone">
+        <div class="icon">📁</div>
+        <h4>Drop an STL file here</h4>
+        <p>or click to browse &middot; .stl files only</p>
+      </div>
+      <input type="file" id="stlFileInput" accept=".stl" style="display:none">
+      <div class="file-info" id="stlFileInfo">
+        <span class="label">📄 <span id="stlFileName">-</span></span>
+        <button class="remove" id="stlRemoveBtn" title="Remove file">&times;</button>
+      </div>
+
+      <div class="input-group" style="margin-top:12px">
+        <input type="number" id="stlAngle" value="45" placeholder="Overhang angle (degrees)" min="10" max="90" style="max-width:200px">
+        <button class="btn btn-primary" id="analyzeBtn">🔍 Analyze</button>
+        <button class="btn btn-secondary" id="optimizeBtn">🌲 Generate Supports</button>
+      </div>
+
+      <div id="stlResults" class="results-area">
+        <div id="stlLoading" class="loading-row" style="display:none">
+          <span class="spinner"></span> Processing...
+        </div>
+        <div id="stlError" class="error-box" style="display:none"></div>
+        <div id="stlResultContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ Filament Search ═══════════ -->
+  <div class="section" id="filamentSection">
+    <div class="section-header">
+      <span class="icon">🧵</span> Filament Database
+      <span style="margin-left:auto;font-size:11px;color:var(--text-muted);font-weight:400;">Search filaments &amp; get recommended profiles</span>
+    </div>
+    <div class="section-body">
+      <div class="input-group">
+        <input type="text" id="filamentQuery" placeholder='e.g. "Bambu Lab PLA Basic" or "PETG" or "Silk"'>
+        <button class="btn btn-primary" id="filamentSearchBtn">🔎 Search</button>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn btn-secondary" data-recommend="PLA" style="font-size:11px">🔥 PLA</button>
+        <button class="btn btn-secondary" data-recommend="PETG" style="font-size:11px">🧪 PETG</button>
+        <button class="btn btn-secondary" data-recommend="ABS" style="font-size:11px">🏗️ ABS</button>
+        <button class="btn btn-secondary" data-recommend="TPU" style="font-size:11px">🤸 TPU</button>
+        <button class="btn btn-secondary" data-recommend="Nylon" style="font-size:11px">🧵 Nylon</button>
+      </div>
+
+      <div id="filamentResults" class="results-area">
+        <div id="filamentLoading" class="loading-row" style="display:none">
+          <span class="spinner"></span> Searching...
+        </div>
+        <div id="filamentError" class="error-box" style="display:none"></div>
+        <div id="filamentResultContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ Print Inspection ═══════════ -->
+  <div class="section" id="printSection">
+    <div class="section-header">
+      <span class="icon">🔍</span> Print Quality Inspection
+      <span style="margin-left:auto;font-size:11px;color:var(--text-muted);font-weight:400;">Upload a photo to analyze print quality</span>
+    </div>
+    <div class="section-body">
+      <div class="upload-zone" id="printDropZone">
+        <div class="icon">📸</div>
+        <h4>Upload a print photo</h4>
+        <p>click to browse &middot; png, jpg, webp</p>
+      </div>
+      <input type="file" id="printFileInput" accept="image/png,image/jpeg,image/webp" style="display:none">
+      <div class="file-info" id="printFileInfo">
+        <span class="label">🖼️ <span id="printFileName">-</span></span>
+        <button class="remove" id="printRemoveBtn" title="Remove file">&times;</button>
+      </div>
+      <img class="image-preview" id="printPreview" alt="Print photo preview">
+
+      <div style="margin-top:12px">
+        <button class="btn btn-primary" id="inspectBtn">🔍 Inspect Print</button>
+      </div>
+
+      <div id="printResults" class="results-area">
+        <div id="printLoading" class="loading-row" style="display:none">
+          <span class="spinner"></span> Analyzing print quality...
+        </div>
+        <div id="printError" class="error-box" style="display:none"></div>
+        <div id="printResultContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ Footer ═══════════ -->
+  <div style="text-align:center;padding:16px 0;color:var(--text-muted);font-size:12px">
+    SupportSage &mdash; Open source 3D print support optimization
+  </div>
+</div>
+
+<script>
+// ── DOM Refs ──
+const stlDropZone = document.getElementById('stlDropZone');
+const stlFileInput = document.getElementById('stlFileInput');
+const stlFileInfo = document.getElementById('stlFileInfo');
+const stlFileName = document.getElementById('stlFileName');
+const stlRemoveBtn = document.getElementById('stlRemoveBtn');
+const stlAngle = document.getElementById('stlAngle');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const optimizeBtn = document.getElementById('optimizeBtn');
+const stlResults = document.getElementById('stlResults');
+const stlLoading = document.getElementById('stlLoading');
+const stlError = document.getElementById('stlError');
+const stlResultContent = document.getElementById('stlResultContent');
+
+const filamentQuery = document.getElementById('filamentQuery');
+const filamentSearchBtn = document.getElementById('filamentSearchBtn');
+const filamentResults = document.getElementById('filamentResults');
+const filamentLoading = document.getElementById('filamentLoading');
+const filamentError = document.getElementById('filamentError');
+const filamentResultContent = document.getElementById('filamentResultContent');
+
+const printDropZone = document.getElementById('printDropZone');
+const printFileInput = document.getElementById('printFileInput');
+const printFileInfo = document.getElementById('printFileInfo');
+const printFileName = document.getElementById('printFileName');
+const printRemoveBtn = document.getElementById('printRemoveBtn');
+const printPreview = document.getElementById('printPreview');
+const inspectBtn = document.getElementById('inspectBtn');
+const printResults = document.getElementById('printResults');
+const printLoading = document.getElementById('printLoading');
+const printError = document.getElementById('printError');
+const printResultContent = document.getElementById('printResultContent');
+
+const versionBadge = document.getElementById('versionBadge');
+const versionDisplay = document.getElementById('versionDisplay');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+
+// ── State ──
+let stlFilePath = null;
+let printImagePath = null;
+
+// ── API fetch helper ──
+async function apiPost(endpoint, data) {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return res.json();
+}
+
+// ── Version check on load ──
+async function checkVersion() {
+  try {
+    const info = await apiPost('/api/version', {});
+    if (info.version) {
+      versionDisplay.textContent = 'v' + info.version;
+    }
+    statusDot.className = 'status-dot online';
+    statusText.textContent = 'connected';
+  } catch (e) {
+    statusDot.className = 'status-dot offline';
+    statusText.textContent = 'disconnected';
+  }
+}
+checkVersion();
+
+// ════════════════════════════════════════
+// ── STL Upload ──
+// ════════════════════════════════════════
+
+stlDropZone.addEventListener('click', () => stlFileInput.click());
+
+stlDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  stlDropZone.classList.add('dragover');
+});
+stlDropZone.addEventListener('dragleave', () => {
+  stlDropZone.classList.remove('dragover');
+});
+stlDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  stlDropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.toLowerCase().endsWith('.stl')) handleStlFile(file);
+});
+
+stlFileInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) handleStlFile(e.target.files[0]);
+});
+
+stlRemoveBtn.addEventListener('click', () => {
+  stlFilePath = null;
+  stlFileInfo.classList.remove('visible');
+  stlFileInput.value = '';
+  stlDropZone.style.display = '';
+  stlResults.classList.remove('visible');
+});
+
+function handleStlFile(file) {
+  stlFilePath = file.name;
+  stlFileName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+  stlFileInfo.classList.add('visible');
+  stlDropZone.style.display = 'none';
+  stlResults.classList.remove('visible');
+  stlError.style.display = 'none';
+}
+
+// ── STL Analyze ──
+analyzeBtn.addEventListener('click', async () => {
+  if (!stlFilePath) { showStlError('Please upload an STL file first.'); return; }
+  const angle = parseInt(stlAngle.value) || 45;
+
+  stlResultContent.innerHTML = '';
+  stlError.style.display = 'none';
+  stlLoading.style.display = 'flex';
+  stlResults.classList.add('visible');
+
+  try {
+    // Build payload
+    const payload = { stl_path: stlFilePath, angle };
+
+    // Check if there's a filament query to include
+    const fq = filamentQuery.value.trim();
+    if (fq) payload.filament = fq;
+
+    const result = await apiPost('/api/analyze', payload);
+
+    stlLoading.style.display = 'none';
+
+    if (result.error) {
+      showStlError(result.error);
+      return;
+    }
+
+    renderStlAnalysis(result);
+  } catch (e) {
+    stlLoading.style.display = 'none';
+    showStlError('Network error: ' + e.message);
+  }
+});
+
+// ── STL Optimize ──
+optimizeBtn.addEventListener('click', async () => {
+  if (!stlFilePath) { showStlError('Please upload an STL file first.'); return; }
+  const angle = parseInt(stlAngle.value) || 45;
+
+  stlResultContent.innerHTML = '';
+  stlError.style.display = 'none';
+  stlLoading.style.display = 'flex';
+  stlResults.classList.add('visible');
+
+  try {
+    const payload = { stl_path: stlFilePath, angle, strategy: 'balanced' };
+
+    const fq = filamentQuery.value.trim();
+    if (fq) payload.filament = fq;
+
+    const result = await apiPost('/api/optimize', payload);
+
+    stlLoading.style.display = 'none';
+
+    if (result.error) {
+      showStlError(result.error);
+      return;
+    }
+
+    renderStlOptimize(result);
+  } catch (e) {
+    stlLoading.style.display = 'none';
+    showStlError('Network error: ' + e.message);
+  }
+});
+
+function showStlError(msg) {
+  stlError.textContent = msg;
+  stlError.style.display = 'block';
+  stlResults.classList.add('visible');
+}
+
+function renderStlAnalysis(data) {
+  let html = '<div class="result-card">';
+  html += '<h4>📊 Analysis Results</h4>';
+
+  // Model stats grid
+  html += '<div class="result-grid">';
+  const stats = [
+    ['Faces', data.face_count ?? data.faces ?? '-'],
+    ['Vertices', data.vertex_count ?? data.vertices ?? '-'],
+    ['Volume (mm³)', data.volume ?? '-'],
+    ['Support Islands', data.support_islands ?? data.islands ?? '-'],
+  ];
+  for (const [label, val] of stats) {
+    html += `<div class="item"><div class="label">${label}</div><div class="value">${val}</div></div>`;
+  }
+  html += '</div>';
+
+  // Overhang data
+  if (data.overhang_pct !== undefined || data.critical !== undefined) {
+    html += '<div style="margin-top:12px"><strong>Overhang Analysis</strong></div>';
+    html += '<div class="result-detail" style="margin-top:4px;display:flex;gap:12px;flex-wrap:wrap">';
+    html += `<span>🔴 Critical: <strong>${data.critical ?? 0}</strong></span>`;
+    html += `<span>🟠 Moderate: <strong>${data.moderate ?? 0}</strong></span>`;
+    html += `<span>🟡 Borderline: <strong>${data.borderline ?? 0}</strong></span>`;
+    html += `<span>🟢 Safe: <strong>${data.safe ?? 0}</strong></span>`;
+    if (data.overhang_pct !== undefined) {
+      html += `<span>⚠️ ${data.overhang_pct}% need support</span>`;
+    }
+    html += '</div>';
+  }
+
+  // Material estimate
+  if (data.support_volume || data.savings) {
+    html += '<div style="margin-top:12px"><strong>Material Estimate</strong></div>';
+    html += '<div class="result-detail" style="margin-top:4px">';
+    html += `Support Vol: <strong>${data.support_volume ?? '-'} mm³</strong> &nbsp;|&nbsp; `;
+    html += `Savings: <strong>~${data.savings ?? 0}%</strong> vs uniform`;
+    html += '</div>';
+  }
+
+  // Filament enrichment
+  if (data.filament) {
+    html += '<div style="margin-top:12px"><strong>🧵 Matched Filaments</strong></div>';
+    html += renderFilamentList(data.filament);
+  }
+
+  html += '</div>';
+  stlResultContent.innerHTML = html;
+}
+
+function renderStlOptimize(data) {
+  let html = '<div class="result-card">';
+  html += '<h4>🌲 Support Generation Complete</h4>';
+  html += '<div class="result-detail">';
+  html += `<p>Status: <strong style="color:var(--safe)">${data.status}</strong></p>`;
+  if (data.log) {
+    const logPreview = data.log.length > 300 ? data.log.slice(0, 300) + '...' : data.log;
+    html += `<p style="margin-top:8px;font-family:monospace;font-size:11px;background:var(--surface3);padding:8px;border-radius:4px;white-space:pre-wrap">${escHtml(logPreview)}</p>`;
+  }
+  html += '</div>';
+
+  // Filament enrichment
+  if (data.filament) {
+    html += '<div style="margin-top:12px"><strong>🧵 Matched Filaments</strong></div>';
+    html += renderFilamentList(data.filament);
+  }
+
+  html += '</div>';
+  stlResultContent.innerHTML = html;
+}
+
+// ════════════════════════════════════════
+// ── Filament Search ──
+// ════════════════════════════════════════
+
+filamentSearchBtn.addEventListener('click', doFilamentSearch);
+filamentQuery.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doFilamentSearch();
+});
+
+// Quick-recommend buttons
+document.querySelectorAll('[data-recommend]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    filamentQuery.value = btn.dataset.recommend;
+    doFilamentSearch();
+  });
+});
+
+async function doFilamentSearch() {
+  const query = filamentQuery.value.trim();
+  if (!query) { showFilamentError('Enter a search term (e.g. "PLA", "Bambu Lab", "Silk").'); return; }
+
+  filamentResultContent.innerHTML = '';
+  filamentError.style.display = 'none';
+  filamentLoading.style.display = 'flex';
+  filamentResults.classList.add('visible');
+
+  try {
+    const data = await apiPost('/api/filament-search', { query });
+
+    filamentLoading.style.display = 'none';
+
+    if (data.error) {
+      showFilamentError(data.error);
+      return;
+    }
+
+    if (!data.results || data.results.length === 0) {
+      filamentResultContent.innerHTML = '<div class="result-card"><div class="result-detail" style="text-align:center;padding:12px;color:var(--text-muted)">No results found for "' + escHtml(query) + '"</div></div>';
+      return;
+    }
+
+    filamentResultContent.innerHTML = renderFilamentList(data.results);
+  } catch (e) {
+    filamentLoading.style.display = 'none';
+    showFilamentError('Network error: ' + e.message);
+  }
+}
+
+function showFilamentError(msg) {
+  filamentError.textContent = msg;
+  filamentError.style.display = 'block';
+  filamentResults.classList.add('visible');
+}
+
+function renderFilamentList(results) {
+  if (!Array.isArray(results)) {
+    return '<div class="error-box">Unexpected response format</div>';
+  }
+
+  let html = '';
+  for (const item of results) {
+    if (item.error) {
+      html += '<div class="error-box">' + escHtml(item.error) + '</div>';
+      continue;
+    }
+    const name = item.name || item.brand + ' ' + (item.model || '') || 'Unknown';
+    const brand = item.brand || '';
+    const material = item.material || item.material_type || '';
+    const nozzle = item.nozzle_temp || item.nozzle || '';
+    const bed = item.bed_temp || item.bed || '';
+
+    html += '<div class="result-card">';
+    html += `<h4>${escHtml(name)}</h4>`;
+    html += '<div class="result-detail">';
+    if (brand) html += `<strong>Brand:</strong> ${escHtml(brand)}<br>`;
+    if (material) html += `<strong>Material:</strong> ${escHtml(material)}<br>`;
+
+    if (nozzle || bed) {
+      html += '<div class="temp-row">';
+      if (nozzle) html += `<span class="temp-badge nozzle">🌡️ Nozzle: ${escHtml(nozzle)}</span>`;
+      if (bed) html += `<span class="temp-badge bed">🛏️ Bed: ${escHtml(bed)}</span>`;
+      html += '</div>';
+    }
+
+    // Additional details
+    const extras = ['density', 'diameter', 'color', 'weight', 'price', 'notes', 'description'];
+    for (const key of extras) {
+      if (item[key] && item[key] !== '') {
+        const label = key.charAt(0).toUpperCase() + key.slice(1);
+        html += `<strong>${label}:</strong> ${escHtml(String(item[key]))}<br>`;
+      }
+    }
+
+    html += '</div></div>';
+  }
+  return html;
+}
+
+// ════════════════════════════════════════
+// ── Print Inspection ──
+// ════════════════════════════════════════
+
+printDropZone.addEventListener('click', () => printFileInput.click());
+
+printDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  printDropZone.classList.add('dragover');
+});
+printDropZone.addEventListener('dragleave', () => {
+  printDropZone.classList.remove('dragover');
+});
+printDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  printDropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) handlePrintFile(file);
+});
+
+printFileInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) handlePrintFile(e.target.files[0]);
+});
+
+printRemoveBtn.addEventListener('click', () => {
+  printImagePath = null;
+  printFileInfo.classList.remove('visible');
+  printPreview.classList.remove('visible');
+  printPreview.src = '';
+  printFileInput.value = '';
+  printDropZone.style.display = '';
+  printResults.classList.remove('visible');
+});
+
+function handlePrintFile(file) {
+  printImagePath = file.name;
+  printFileName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+  printFileInfo.classList.add('visible');
+  printDropZone.style.display = 'none';
+  printResults.classList.remove('visible');
+  printError.style.display = 'none';
+
+  // Preview image
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    printPreview.src = e.target.result;
+    printPreview.classList.add('visible');
+  };
+  reader.readAsDataURL(file);
+}
+
+inspectBtn.addEventListener('click', async () => {
+  if (!printImagePath) { showPrintError('Please upload a print photo first.'); return; }
+
+  printResultContent.innerHTML = '';
+  printError.style.display = 'none';
+  printLoading.style.display = 'flex';
+  printResults.classList.add('visible');
+
+  try {
+    const data = await apiPost('/api/print-inspect', { image_path: printImagePath });
+
+    printLoading.style.display = 'none';
+
+    if (data.error) {
+      showPrintError(data.error);
+      return;
+    }
+
+    renderPrintInspection(data);
+  } catch (e) {
+    printLoading.style.display = 'none';
+    showPrintError('Network error: ' + e.message);
+  }
+});
+
+function showPrintError(msg) {
+  printError.textContent = msg;
+  printError.style.display = 'block';
+  printResults.classList.add('visible');
+}
+
+function renderPrintInspection(data) {
+  let html = '<div class="result-card">';
+  html += '<h4>🔍 Print Quality Report</h4>';
+
+  // Overall score
+  const score = data.quality_score || data.score || data.overall_score;
+  if (score !== undefined) {
+    let cls = 'good';
+    if (typeof score === 'number') {
+      if (score < 40) cls = 'bad';
+      else if (score < 70) cls = 'warning';
+    }
+    html += `<div class="quality-score ${cls}">⭐ ${score}/100</div>`;
+  }
+
+  // Detail grid
+  html += '<div class="result-grid" style="margin-top:12px">';
+  const fields = ['layer_shift', 'stringing', 'blobs', 'zits', 'warping',
+                   'under_extrusion', 'over_extrusion', 'layer_adhesion',
+                   'surface_quality', 'detail_resolution', 'print_time',
+                   'filament_used', 'confidence'];
+  for (const key of fields) {
+    if (data[key] !== undefined) {
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const val = typeof data[key] === 'number' ? data[key] : String(data[key]);
+      html += `<div class="item"><div class="label">${label}</div><div class="value">${val}</div></div>`;
+    }
+  }
+  html += '</div>';
+
+  // Issues list
+  if (data.issues && Array.isArray(data.issues) && data.issues.length > 0) {
+    html += '<div style="margin-top:12px"><strong>Detected Issues</strong></div>';
+    html += '<ul style="margin-top:4px;padding-left:16px;font-size:12px;color:var(--text-dim);line-height:1.8">';
+    for (const issue of data.issues) {
+      html += `<li>${escHtml(typeof issue === 'string' ? issue : (issue.description || issue.name || JSON.stringify(issue)))}</li>`;
+    }
+    html += '</ul>';
+  }
+
+  // Recommendations
+  if (data.recommendations && Array.isArray(data.recommendations) && data.recommendations.length > 0) {
+    html += '<div style="margin-top:12px"><strong>Recommendations</strong></div>';
+    html += '<ul style="margin-top:4px;padding-left:16px;font-size:12px;color:var(--safe);line-height:1.8">';
+    for (const rec of data.recommendations) {
+      html += `<li>${escHtml(typeof rec === 'string' ? rec : (rec.text || rec.description || JSON.stringify(rec)))}</li>`;
+    }
+    html += '</ul>';
+  }
+
+  // Any remaining fields
+  const extraKeys = Object.keys(data).filter(k =>
+    !['quality_score', 'score', 'overall_score', 'issues', 'recommendations', ...fields].includes(k)
+  );
+  if (extraKeys.length > 0) {
+    html += '<div style="margin-top:12px"><strong>Additional Data</strong></div>';
+    html += '<div class="result-detail" style="margin-top:4px">';
+    for (const key of extraKeys) {
+      if (typeof data[key] !== 'object') {
+        html += `${key}: <strong>${escHtml(String(data[key]))}</strong><br>`;
+      }
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  printResultContent.innerHTML = html;
+}
+
+// ════════════════════════════════════════
+// ── Utilities ──
+// ════════════════════════════════════════
+
+function escHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+console.log('🧠 SupportSage Web Demo loaded');
+</script>
+</body>
+</html>

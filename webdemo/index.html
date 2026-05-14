@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportSage — 3D Print Support Analyzer</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --surface2: #1a1a1a;
+    --accent: #d4a747;
+    --accent-dim: #a07830;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --critical: #ff3333;
+    --moderate: #ff8800;
+    --borderline: #ffcc00;
+    --safe: #22cc66;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  /* Header */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid #222;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 10;
+    flex-shrink: 0;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 20px; font-weight: 700;
+    color: var(--accent);
+  }
+  .logo span { font-size: 24px; }
+  .logo small { font-size: 12px; color: var(--text-dim); font-weight: 400; }
+  header nav { display: flex; gap: 16px; align-items: center; }
+  header nav a {
+    color: var(--text-dim); text-decoration: none;
+    font-size: 13px; transition: color .2s;
+  }
+  header nav a:hover { color: var(--accent); }
+  .badge {
+    background: var(--accent); color: #000; padding: 2px 10px;
+    border-radius: 99px; font-size: 11px; font-weight: 600;
+  }
+
+  /* Main layout */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* 3D Viewport */
+  .viewport {
+    flex: 1; position: relative; background: var(--bg);
+    overflow: hidden;
+  }
+  .viewport canvas { display: block; width: 100%; height: 100%; }
+
+  /* Drop zone overlay */
+  .drop-zone {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.7);
+    z-index: 5;
+    transition: opacity .3s;
+    cursor: pointer;
+  }
+  .drop-zone.hidden { opacity: 0; pointer-events: none; }
+  .drop-zone .icon { font-size: 64px; margin-bottom: 16px; color: var(--accent); }
+  .drop-zone h2 { font-size: 22px; margin-bottom: 8px; }
+  .drop-zone p { color: var(--text-dim); font-size: 14px; }
+  .drop-zone .hint {
+    margin-top: 16px; padding: 8px 16px;
+    background: var(--surface2); border-radius: var(--radius);
+    font-size: 12px; color: var(--text-dim);
+    border: 1px dashed #333;
+  }
+
+  /* Viewport overlay info */
+  .viewport-info {
+    position: absolute; bottom: 16px; left: 16px;
+    background: rgba(0,0,0,.75);
+    backdrop-filter: blur(8px);
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 12px; color: var(--text-dim);
+    z-index: 2;
+  }
+  .viewport-info span { color: var(--text); }
+
+  /* Legend */
+  .legend {
+    position: absolute; top: 16px; right: 16px;
+    background: rgba(0,0,0,.75);
+    backdrop-filter: blur(8px);
+    padding: 10px 14px; border-radius: 8px;
+    font-size: 11px; z-index: 2;
+    display: none;
+  }
+  .legend.visible { display: block; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Panel */
+  .panel {
+    width: 340px; background: var(--surface);
+    border-left: 1px solid #222;
+    padding: 20px; overflow-y: auto;
+    flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .panel h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-dim); margin-bottom: 4px;
+  }
+  .stat-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .stat-card {
+    background: var(--surface2); padding: 12px; border-radius: var(--radius);
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 22px; font-weight: 700; color: var(--accent);
+  }
+  .stat-label {
+    font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: .5px; margin-top: 2px;
+  }
+  .stat-card .saving { color: var(--safe); }
+
+  /* Severity breakdown */
+  .severity-bar {
+    height: 8px; border-radius: 4px; overflow: hidden;
+    display: flex; margin: 8px 0;
+  }
+  .severity-bar .seg { height: 100%; transition: width .5s; }
+  .severity-labels {
+    display: flex; justify-content: space-between; font-size: 11px;
+  }
+  .severity-labels span { display: flex; align-items: center; gap: 4px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+  /* Actions */
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    flex: 1; padding: 10px 16px; border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all .2s; text-align: center;
+    min-width: 100px;
+  }
+  .btn-primary {
+    background: var(--accent); color: #000;
+  }
+  .btn-primary:hover { background: #c89a35; }
+  .btn-secondary {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid #333;
+  }
+  .btn-secondary:hover { background: #222; }
+
+  /* Empty state */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100%;
+    text-align: center; color: var(--text-dim); gap: 8px;
+  }
+  .empty-state .icon { font-size: 48px; }
+  .empty-state p { font-size: 13px; line-height: 1.5; }
+
+  /* Scrollbar */
+  .panel::-webkit-scrollbar { width: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  @media (max-width: 768px) {
+    .main { flex-direction: column; }
+    .panel { width: 100%; max-height: 40vh; border-left: none; border-top: 1px solid #222; }
+    header { padding: 10px 16px; }
+    header nav a { display: none; }
+  }
+
+  /* Loading spinner */
+  .spinner {
+    width: 24px; height: 24px;
+    border: 3px solid #333; border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin: 12px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span>🧠</span>
+    SupportSage
+    <small>v0.1.0</small>
+  </div>
+  <nav>
+    <a href="https://github.com/bossman-lab/supportsage" target="_blank">GitHub</a>
+    <a href="https://dev.to/lanternproton" target="_blank">Blog</a>
+    <a href="#" id="exampleLink">Load Example</a>
+    <span class="badge">BETA</span>
+  </nav>
+</header>
+
+<div class="main">
+  <!-- 3D Viewport -->
+  <div class="viewport" id="viewport">
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">📁</div>
+      <h2>Drop an STL file</h2>
+      <p>or click to browse</p>
+      <div class="hint">Drag & drop any .stl file to analyze overhangs</div>
+    </div>
+
+    <div class="legend" id="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:var(--critical)"></span> Critical (>120°)</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--moderate)"></span> Moderate (70-120°)</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--borderline)"></span> Borderline (45-70°)</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--safe)"></span> Safe (&lt;45°)</div>
+    </div>
+
+    <div class="viewport-info" id="vpInfo" style="display:none">
+      <span id="faceCount">0</span> faces &middot;
+      <span id="vertCount">0</span> verts &middot;
+      Drag to rotate &middot; Scroll to zoom
+    </div>
+
+    <input type="file" id="fileInput" accept=".stl" style="display:none">
+  </div>
+
+  <!-- Stats Panel -->
+  <div class="panel" id="panel">
+    <div id="panelContent">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🖨️</div>
+        <h3 style="color:var(--text);font-size:16px;font-weight:600">No model loaded</h3>
+        <p>Drop an STL file to see<br>overhang analysis and savings</p>
+      </div>
+
+      <div id="statsContent" style="display:none">
+        <div>
+          <h3>📊 Model Stats</h3>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-value" id="statFaces">-</div>
+              <div class="stat-label">Faces</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="statVerts">-</div>
+              <div class="stat-label">Vertices</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="statVolume">-</div>
+              <div class="stat-label">Volume (mm³)</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="statIslands">-</div>
+              <div class="stat-label">Support Islands</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3>⚠️ Overhang Analysis</h3>
+          <div class="severity-bar" id="sevBar"></div>
+          <div class="severity-labels">
+            <span><span class="dot" style="background:var(--critical)"></span> <span id="sevCrit">0</span></span>
+            <span><span class="dot" style="background:var(--moderate)"></span> <span id="sevMod">0</span></span>
+            <span><span class="dot" style="background:var(--borderline)"></span> <span id="sevBord">0</span></span>
+            <span><span class="dot" style="background:var(--safe)"></span> <span id="sevSafe">0</span></span>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-dim);text-align:center">
+            <span id="overhangPct">0</span>% of faces need support
+          </div>
+        </div>
+
+        <div>
+          <h3>💰 Material Estimate</h3>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-value" id="estVolume">-</div>
+              <div class="stat-label">Support Vol (mm³)</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value saving" id="estSavings">-</div>
+              <div class="stat-label">vs Uniform Support</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-secondary" id="resetBtn">🔄 Load New</button>
+          <a href="https://github.com/bossman-lab/supportsage" target="_blank" class="btn btn-primary" style="text-decoration:none">🐙 Get the CLI</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── DOM Refs ──
+const viewport = document.getElementById('viewport');
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const legend = document.getElementById('legend');
+const vpInfo = document.getElementById('vpInfo');
+const emptyState = document.getElementById('emptyState');
+const statsContent = document.getElementById('statsContent');
+
+const statFaces = document.getElementById('statFaces');
+const statVerts = document.getElementById('statVerts');
+const statVolume = document.getElementById('statVolume');
+const statIslands = document.getElementById('statIslands');
+const sevBar = document.getElementById('sevBar');
+const sevCrit = document.getElementById('sevCrit');
+const sevMod = document.getElementById('sevMod');
+const sevBord = document.getElementById('sevBord');
+const sevSafe = document.getElementById('sevSafe');
+const overhangPct = document.getElementById('overhangPct');
+const estVolume = document.getElementById('estVolume');
+const estSavings = document.getElementById('estSavings');
+const faceCount = document.getElementById('faceCount');
+const vertCount = document.getElementById('vertCount');
+
+// ── Three.js Setup ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0a);
+
+const camera = new THREE.PerspectiveCamera(40, viewport.clientWidth / viewport.clientHeight, 0.1, 1000);
+camera.position.set(5, 4, 8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+viewport.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.1;
+controls.minDistance = 1;
+controls.maxDistance = 50;
+controls.target.set(0, 0, 0);
+
+// ── Lights ──
+const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
+scene.add(ambientLight);
+
+const keyLight = new THREE.DirectionalLight(0xffeedd, 1.8);
+keyLight.position.set(3, 6, 4);
+keyLight.castShadow = true;
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x8888ff, 0.5);
+fillLight.position.set(-3, 2, -4);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xffd4a7, 0.8);
+rimLight.position.set(0, -2, -5);
+scene.add(rimLight);
+
+// ── Grid / Ground ──
+const gridHelper = new THREE.GridHelper(6, 12, 0x333333, 0x222222);
+gridHelper.position.y = -0.01;
+scene.add(gridHelper);
+
+let currentMesh = null;
+
+// ── STL Parser ──
+function parseSTL(buffer) {
+  const dv = new DataView(buffer);
+  const isBinary = buffer.byteLength > 80 + 4 && new TextDecoder().decode(buffer.slice(0, 5)) !== 'solid';
+  let vertices = [];
+  let normals = [];
+  let faces = [];
+
+  if (isBinary) {
+    const faceCount = dv.getUint32(80, true);
+    let offset = 84;
+    for (let i = 0; i < faceCount; i++) {
+      const nx = dv.getFloat32(offset, true);
+      const ny = dv.getFloat32(offset + 4, true);
+      const nz = dv.getFloat32(offset + 8, true);
+      offset += 12;
+      const v1 = [dv.getFloat32(offset, true), dv.getFloat32(offset + 4, true), dv.getFloat32(offset + 8, true)];
+      const v2 = [dv.getFloat32(offset + 12, true), dv.getFloat32(offset + 16, true), dv.getFloat32(offset + 20, true)];
+      const v3 = [dv.getFloat32(offset + 24, true), dv.getFloat32(offset + 28, true), dv.getFloat32(offset + 32, true)];
+      offset += 36;
+      offset += 2; // attribute byte count
+      const idx = vertices.length / 3;
+      vertices.push(...v1, ...v2, ...v3);
+      normals.push(nx, ny, nz);
+      faces.push(idx, idx + 1, idx + 2);
+    }
+  } else {
+    // ASCII
+    const text = new TextDecoder().decode(buffer);
+    const lines = text.split('\n');
+    const v = []; const n = [];
+    let triCount = 0;
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts[0] === 'vertex') {
+        v.push(parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3]));
+      } else if (parts[0] === 'facet' && parts[1] === 'normal') {
+        n.push(parseFloat(parts[2]), parseFloat(parts[3]), parseFloat(parts[4]));
+      } else if (parts[0] === 'endfacet') {
+        const idx = triCount * 3;
+        faces.push(idx, idx + 1, idx + 2);
+        triCount++;
+      }
+    }
+    vertices = v;
+    // Recompute normals from geometry
+    const computedN = new Float32Array(faces.length);
+    for (let i = 0; i < faces.length; i += 3) {
+      const i0 = faces[i] * 3, i1 = faces[i+1] * 3, i2 = faces[i+2] * 3;
+      const ax = vertices[i1] - vertices[i0], ay = vertices[i1+1] - vertices[i0+1], az = vertices[i1+2] - vertices[i0+2];
+      const bx = vertices[i2] - vertices[i0], by = vertices[i2+1] - vertices[i0+1], bz = vertices[i2+2] - vertices[i0+2];
+      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+      if (len > 0) { computedN[i] = nx/len; computedN[i+1] = ny/len; computedN[i+2] = nz/len; }
+    }
+    normals = Array.from(computedN);
+  }
+
+  return { vertices: new Float32Array(vertices), normals: new Float32Array(normals), faces: new Uint32Array(faces) };
+}
+
+// ── Overhang Analysis ──
+const ANGLE_THRESHOLD = 45;
+const COS_THRESHOLD = Math.cos(ANGLE_THRESHOLD * Math.PI / 180);
+
+function analyzeOverhangs(vertices, faces) {
+  const numFaces = faces.length / 3;
+  const colors = new Float32Array(vertices.length);
+
+  // Compute face normals and overhang
+  let crit = 0, mod = 0, bord = 0, safe = 0;
+  const overhangData = [];
+
+  for (let i = 0; i < numFaces; i++) {
+    const i0 = faces[i*3] * 3, i1 = faces[i*3+1] * 3, i2 = faces[i*3+2] * 3;
+    const ax = vertices[i1] - vertices[i0], ay = vertices[i1+1] - vertices[i0+1], az = vertices[i1+2] - vertices[i0+2];
+    const bx = vertices[i2] - vertices[i0], by = vertices[i2+1] - vertices[i0+1], bz = vertices[i2+2] - vertices[i0+2];
+    let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+    if (len > 0) { nx /= len; ny /= len; nz /= len; }
+
+    const dot = nz; // dot with Z-up (0,0,1)
+    let sev, color;
+
+    if (dot < -0.5) { sev = 'critical'; color = [1, 0.2, 0.2]; crit++; }
+    else if (dot < 0) { sev = 'moderate'; color = [1, 0.53, 0]; mod++; }
+    else if (dot < COS_THRESHOLD) { sev = 'borderline'; color = [1, 0.8, 0]; bord++; }
+    else { sev = 'safe'; color = [0.13, 0.8, 0.4]; safe++; }
+
+    overhangData.push(sev);
+    // Apply color to vertices
+    for (let j = 0; j < 3; j++) {
+      const vi = faces[i*3 + j] * 3;
+      colors[vi] = color[0]; colors[vi+1] = color[1]; colors[vi+2] = color[2];
+    }
+  }
+
+  // Island detection (BFS on face adjacency)
+  const adj = new Array(numFaces).fill(null).map(() => []);
+  const edgeMap = new Map();
+  for (let i = 0; i < numFaces; i++) {
+    for (let e = 0; e < 3; e++) {
+      const a = faces[i*3 + e], b = faces[i*3 + (e+1)%3];
+      const key = Math.min(a,b) + ',' + Math.max(a,b);
+      if (edgeMap.has(key)) {
+        const j = edgeMap.get(key);
+        adj[i].push(j);
+        adj[j].push(i);
+      } else {
+        edgeMap.set(key, i);
+      }
+    }
+  }
+
+  const visited = new Array(numFaces).fill(false);
+  const islands = [];
+  for (let i = 0; i < numFaces; i++) {
+    if (!visited[i] && overhangData[i] !== 'safe') {
+      const island = [];
+      const queue = [i];
+      visited[i] = true;
+      while (queue.length) {
+        const f = queue.shift();
+        island.push(f);
+        for (const nb of adj[f]) {
+          if (!visited[nb] && overhangData[nb] !== 'safe') {
+            visited[nb] = true;
+            queue.push(nb);
+          }
+        }
+      }
+      islands.push(island);
+    }
+  }
+
+  const ohFaces = crit + mod + bord;
+  const pct = numFaces > 0 ? (ohFaces / numFaces * 100) : 0;
+
+  // Estimate volume
+  const bounds = getBounds(vertices);
+  const height = bounds.max[1] - bounds.min[1];
+  const area = estimateArea(vertices, faces);
+  const supportVol = area * height * 0.4;
+  const uniformVol = supportVol * 1.5;
+  const savings = Math.round((1 - supportVol / uniformVol) * 100);
+
+  return {
+    colors, crit, mod, bord, safe, pct: Math.round(pct * 10) / 10,
+    islands: islands.length, supportVol: Math.round(supportVol),
+    uniformVol: Math.round(uniformVol), savings
+  };
+}
+
+function getBounds(vertices) {
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (let i = 0; i < vertices.length; i += 3) {
+    minX = Math.min(minX, vertices[i]); maxX = Math.max(maxX, vertices[i]);
+    minY = Math.min(minY, vertices[i+1]); maxY = Math.max(maxY, vertices[i+1]);
+    minZ = Math.min(minZ, vertices[i+2]); maxZ = Math.max(maxZ, vertices[i+2]);
+  }
+  return { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] };
+}
+
+function estimateArea(vertices, faces) {
+  let area = 0;
+  for (let i = 0; i < faces.length; i += 3) {
+    const i0 = faces[i]*3, i1 = faces[i+1]*3, i2 = faces[i+2]*3;
+    const ax = vertices[i1]-vertices[i0], ay = vertices[i1+1]-vertices[i0+1], az = vertices[i1+2]-vertices[i0+2];
+    const bx = vertices[i2]-vertices[i0], by = vertices[i2+1]-vertices[i0+1], bz = vertices[i2+2]-vertices[i0+2];
+    const cx = ay*bz - az*by, cy = az*bx - ax*bz, cz = ax*by - ay*bx;
+    area += Math.sqrt(cx*cx + cy*cy + cz*cz) / 2;
+  }
+  return area;
+}
+
+function computeVolume(vertices, faces) {
+  let vol = 0;
+  for (let i = 0; i < faces.length; i += 3) {
+    const i0 = faces[i]*3, i1 = faces[i+1]*3, i2 = faces[i+2]*3;
+    const v0 = [vertices[i0], vertices[i0+1], vertices[i0+2]];
+    const v1 = [vertices[i1], vertices[i1+1], vertices[i1+2]];
+    const v2 = [vertices[i2], vertices[i2+1], vertices[i2+2]];
+    vol += v0[0]*(v1[1]*v2[2] - v2[1]*v1[2])
+         - v0[1]*(v1[0]*v2[2] - v2[0]*v1[2])
+         + v0[2]*(v1[0]*v2[1] - v2[0]*v1[1]);
+  }
+  return Math.abs(vol) / 6;
+}
+
+// ── Load Model ──
+function loadModel(vertices, faces, normals) {
+  // Remove previous model
+  if (currentMesh) { scene.remove(currentMesh); currentMesh.geometry.dispose(); currentMesh.material.dispose(); }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+
+  const index = new THREE.BufferAttribute(faces, 1);
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+
+  // Center model
+  const box = new THREE.Box3().setFromBufferAttribute(geometry.attributes.position);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  const pos = geometry.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.array[i*3] -= center.x;
+    pos.array[i*3+1] -= center.y;
+    pos.array[i*3+2] -= center.z;
+  }
+  pos.needsUpdate = true;
+  geometry.computeVertexNormals();
+
+  // Run analysis
+  const result = analyzeOverhangs(vertices, faces);
+
+  // Apply vertex colors from analysis
+  geometry.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
+
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.4,
+    metalness: 0.3,
+    side: THREE.DoubleSide,
+    envMapIntensity: 0.6,
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  
+  // Scale to fit viewport
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const scale = 3.5 / maxDim;
+  mesh.scale.set(scale, scale, scale);
+
+  scene.add(mesh);
+  currentMesh = mesh;
+
+  // Reset camera
+  controls.target.set(0, 0, 0);
+  camera.position.set(maxDim * 2 * scale, maxDim * 1.5 * scale, maxDim * 2.5 * scale);
+  controls.update();
+
+  // Update UI
+  updateStats(vertices, faces, result);
+}
+
+function updateStats(vertices, faces, result) {
+  emptyState.style.display = 'none';
+  statsContent.style.display = 'block';
+  legend.classList.add('visible');
+  vpInfo.style.display = 'block';
+
+  const vol = computeVolume(vertices, faces);
+
+  statFaces.textContent = (faces.length / 3).toLocaleString();
+  statVerts.textContent = (vertices.length / 3).toLocaleString();
+  statVolume.textContent = Math.round(vol).toLocaleString();
+  statIslands.textContent = result.islands;
+
+  sevCrit.textContent = result.crit;
+  sevMod.textContent = result.mod;
+  sevBord.textContent = result.bord;
+  sevSafe.textContent = result.safe;
+  overhangPct.textContent = result.pct;
+
+  const total = result.crit + result.mod + result.bord + result.safe;
+  if (total > 0) {
+    sevBar.innerHTML = `
+      <div class="seg" style="width:${result.crit/total*100}%;background:var(--critical)"></div>
+      <div class="seg" style="width:${result.mod/total*100}%;background:var(--moderate)"></div>
+      <div class="seg" style="width:${result.bord/total*100}%;background:var(--borderline)"></div>
+      <div class="seg" style="width:${result.safe/total*100}%;background:var(--safe)"></div>
+    `;
+  }
+
+  estVolume.textContent = result.supportVol.toLocaleString() + ' mm³';
+  estSavings.textContent = '~' + result.savings + '%';
+
+  faceCount.textContent = (faces.length / 3).toLocaleString();
+  vertCount.textContent = (vertices.length / 3).toLocaleString();
+}
+
+// ── Drag & Drop ──
+dropZone.addEventListener('click', () => fileInput.click());
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.style.borderColor = 'var(--accent)';
+  dropZone.style.background = 'rgba(212,167,71,.05)';
+});
+
+dropZone.addEventListener('dragleave', () => {
+  dropZone.style.borderColor = '';
+  dropZone.style.background = '';
+});
+
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.style.borderColor = '';
+  dropZone.style.background = '';
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.stl')) handleFile(file);
+});
+
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  dropZone.classList.add('hidden');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const buffer = e.target.result;
+    const data = parseSTL(buffer);
+    loadModel(data.vertices, data.faces, data.normals);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Example Model ──
+function loadExample() {
+  // Generate a simple overhang test model procedurally
+  const geo = new THREE.BoxGeometry(2, 1, 2);
+  const pos = geo.attributes.position;
+  const idx = geo.index;
+  const verts = new Float32Array(pos.array);
+  const faces = new Uint32Array(idx.array);
+  const norm = new Float32Array(pos.count * 3);
+
+  // Add a bridge on top
+  const bridgeGeo = new THREE.BoxGeometry(3.5, 0.3, 0.5);
+  bridgeGeo.translate(0, 1.15, 0);
+  const bPos = bridgeGeo.attributes.position;
+  const bIdx = bridgeGeo.index;
+  const bVerts = new Float32Array(bPos.array);
+  const bFaces = new Uint32Array(bIdx.array);
+
+  // Combine
+  const allVerts = new Float32Array(verts.length + bVerts.length);
+  allVerts.set(verts);
+  allVerts.set(bVerts, verts.length);
+  const offset = verts.length / 3;
+  const allFaces = new Uint32Array(faces.length + bFaces.length);
+  allFaces.set(faces);
+  for (let i = 0; i < bFaces.length; i++) allFaces[faces.length + i] = bFaces[i] + offset;
+
+  loadModel(allVerts, allFaces, norm);
+}
+
+document.getElementById('exampleLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  loadExample();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (currentMesh) { scene.remove(currentMesh); currentMesh.geometry.dispose(); currentMesh.material.dispose(); currentMesh = null; }
+  emptyState.style.display = '';
+  statsContent.style.display = 'none';
+  legend.classList.remove('visible');
+  vpInfo.style.display = 'none';
+  dropZone.classList.remove('hidden');
+});
+
+// ── Resize ──
+window.addEventListener('resize', () => {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+
+// ── Render Loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+console.log('🧠 SupportSage Web Demo loaded');
+</script>
+</body>
+</html>

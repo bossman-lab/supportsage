@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "supportsage"
+version = "0.1.0"
+description = "AI-optimized support structures for 3D printing"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "trimesh>=4.0",
+    "numpy-stl>=3.0",
+    "numpy>=1.24",
+]
+
+[project.scripts]
+supportsage = "supportsage.cli:main"
+supportsage-gui = "supportsage.gui_server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["supportsage*"]

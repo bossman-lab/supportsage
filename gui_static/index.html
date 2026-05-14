@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportSage — Desktop GUI</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --surface: #111; --surface2: #1a1a1a;
+    --accent: #d4a747; --accent-dim: #a07830;
+    --text: #e0e0e0; --text-dim: #888;
+    --critical: #ff3333; --moderate: #ff8800;
+    --borderline: #ffcc00; --safe: #22cc66;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; background: var(--surface);
+    border-bottom: 1px solid #222;
+    backdrop-filter: blur(20px); flex-shrink: 0;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; color: var(--accent); }
+  .logo span { font-size: 24px; }
+  header nav { display: flex; gap: 12px; align-items: center; }
+  .badge { background: var(--accent); color: #000; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .viewport { flex: 1; position: relative; background: var(--bg); overflow: hidden; }
+  .viewport canvas { display: block; width: 100%; height: 100%; }
+
+  .drop-zone {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; background: rgba(0,0,0,.7);
+    z-index: 5; transition: opacity .3s; cursor: pointer;
+  }
+  .drop-zone.hidden { opacity: 0; pointer-events: none; }
+  .drop-zone .icon { font-size: 64px; margin-bottom: 16px; color: var(--accent); }
+  .drop-zone h2 { font-size: 22px; margin-bottom: 8px; }
+  .drop-zone p { color: var(--text-dim); font-size: 14px; }
+  .drop-zone .hint { margin-top: 16px; padding: 8px 16px; background: var(--surface2); border-radius: var(--radius); font-size: 12px; color: var(--text-dim); border: 1px dashed #333; }
+
+  .legend {
+    position: absolute; top: 16px; right: 16px;
+    background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+    padding: 10px 14px; border-radius: 8px; font-size: 11px; z-index: 2;
+    display: none;
+  }
+  .legend.visible { display: block; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .viewport-info {
+    position: absolute; bottom: 16px; left: 16px;
+    background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+    padding: 8px 14px; border-radius: 8px; font-size: 12px; color: var(--text-dim); z-index: 2;
+    display: none;
+  }
+
+  .panel {
+    width: 360px; background: var(--surface); border-left: 1px solid #222;
+    padding: 20px; overflow-y: auto; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 4px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card { background: var(--surface2); padding: 12px; border-radius: var(--radius); text-align: center; }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+  .stat-value.saving { color: var(--safe); }
+
+  .severity-bar { height: 8px; border-radius: 4px; overflow: hidden; display: flex; margin: 8px 0; }
+  .severity-bar .seg { height: 100%; transition: width .5s; }
+  .severity-labels { display: flex; justify-content: space-between; font-size: 11px; }
+  .severity-labels span { display: flex; align-items: center; gap: 4px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+  .btn {
+    padding: 10px 16px; border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all .2s; text-align: center;
+  }
+  .btn-primary { background: var(--accent); color: #000; flex: 1; }
+  .btn-primary:hover { background: #c89a35; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid #333; }
+  .btn-secondary:hover { background: #222; }
+  .btn-success { background: #22cc66; color: #000; }
+  .btn-success:hover { background: #1aaa55; }
+  .btn-row { display: flex; gap: 8px; }
+
+  .select-row { display: flex; gap: 8px; align-items: center; }
+  .select-row select {
+    background: var(--surface2); color: var(--text); border: 1px solid #333;
+    padding: 8px 12px; border-radius: 6px; font-size: 12px; flex: 1;
+  }
+
+  .status-bar {
+    margin-top: 4px; padding: 8px 12px; border-radius: 6px;
+    font-size: 12px; line-height: 1.4; display: none;
+  }
+  .status-bar.info { display: block; background: rgba(212,167,71,.1); border: 1px solid rgba(212,167,71,.3); color: var(--accent); }
+  .status-bar.done { display: block; background: rgba(34,204,102,.1); border: 1px solid rgba(34,204,102,.3); color: var(--safe); }
+  .status-bar.error { display: block; background: rgba(255,51,51,.1); border: 1px solid rgba(255,51,51,.3); color: var(--critical); }
+
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; color: var(--text-dim); gap: 8px; }
+  .empty-state .icon { font-size: 48px; }
+
+  .panel::-webkit-scrollbar { width: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  @media (max-width: 768px) {
+    .main { flex-direction: column; }
+    .panel { width: 100%; max-height: 40vh; border-left: none; border-top: 1px solid #222; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span>🧠</span> SupportSage <small style="font-size:12px;color:var(--text-dim);font-weight:400;margin-left:4px">Desktop GUI</small></div>
+  <nav>
+    <a href="https://github.com/bossman-lab/supportsage" target="_blank" style="color:var(--text-dim);text-decoration:none;font-size:13px">GitHub</a>
+    <span class="badge">v0.1.0</span>
+  </nav>
+</header>
+
+<div class="main">
+  <div class="viewport" id="viewport">
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">📁</div>
+      <h2>Drop an STL file</h2>
+      <p>or click to browse</p>
+      <div class="hint">Analyze overhangs, generate optimized supports</div>
+    </div>
+    <div class="legend" id="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:var(--critical)"></span> Critical</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--moderate)"></span> Moderate</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--borderline)"></span> Borderline</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--safe)"></span> Safe</div>
+    </div>
+    <div class="viewport-info" id="vpInfo"><span id="faceCount">0</span> faces</div>
+    <input type="file" id="fileInput" accept=".stl" style="display:none">
+  </div>
+
+  <div class="panel" id="panel">
+    <div id="panelContent">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🖨️</div>
+        <h3 style="color:var(--text);font-size:16px;font-weight:600">No model loaded</h3>
+        <p>Drop an STL file to analyze overhangs<br>and generate optimized supports</p>
+      </div>
+
+      <div id="statsContent" style="display:none">
+        <div>
+          <h3>📊 Model</h3>
+          <div class="stat-grid">
+            <div class="stat-card"><div class="stat-value" id="statFaces">-</div><div class="stat-label">Faces</div></div>
+            <div class="stat-card"><div class="stat-value" id="statIslands">-</div><div class="stat-label">Support Islands</div></div>
+          </div>
+        </div>
+
+        <div>
+          <h3>⚠️ Overhang</h3>
+          <div class="severity-bar" id="sevBar"></div>
+          <div class="severity-labels">
+            <span><span class="dot" style="background:var(--critical)"></span> <span id="sevCrit">0</span></span>
+            <span><span class="dot" style="background:var(--moderate)"></span> <span id="sevMod">0</span></span>
+            <span><span class="dot" style="background:var(--borderline)"></span> <span id="sevBord">0</span></span>
+            <span><span class="dot" style="background:var(--safe)"></span> <span id="sevSafe">0</span></span>
+          </div>
+        </div>
+
+        <div>
+          <h3>💰 Estimated Savings</h3>
+          <div class="stat-grid">
+            <div class="stat-card"><div class="stat-value" id="estVolume">-</div><div class="stat-label">Support (mm³)</div></div>
+            <div class="stat-card"><div class="stat-value saving" id="estSavings">-</div><div class="stat-label">vs Uniform</div></div>
+          </div>
+        </div>
+
+        <div>
+          <h3>🔧 Generate Supports</h3>
+          <div class="select-row" style="margin-bottom:8px">
+            <select id="strategySelect">
+              <option value="light">Light (max savings)</option>
+              <option value="balanced" selected>Balanced ⭐</option>
+              <option value="heavy">Heavy (max stability)</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="genBtn" disabled>🌳 Generate Tree Supports</button>
+          </div>
+          <div class="status-bar" id="statusBar"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="resetBtn" style="flex:1">🔄 New Model</button>
+          <button class="btn btn-secondary" id="downloadBtn" style="flex:1" disabled>⬇️ Download STL</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let currentMesh = null;
+let currentStlPath = '';
+let currentStlData = null;
+let lastAnalysis = null;
+let generatedStlB64 = null;
+
+// ── Three.js ──
+const viewport = document.getElementById('viewport');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0a);
+
+const camera = new THREE.PerspectiveCamera(40, viewport.clientWidth/viewport.clientHeight, 0.1, 1000);
+camera.position.set(5,4,8);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+viewport.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.1;
+controls.target.set(0,0,0);
+
+// Lights
+scene.add(new THREE.AmbientLight(0x404060, 0.6));
+const kl = new THREE.DirectionalLight(0xffeedd, 1.8); kl.position.set(3,6,4); scene.add(kl);
+scene.add(new THREE.DirectionalLight(0x8888ff, 0.5).position.set(-3,2,-4));
+scene.add(new THREE.DirectionalLight(0xffd4a7, 0.8).position.set(0,-2,-5));
+
+const grid = new THREE.GridHelper(6,12,0x333,0x222);
+grid.position.y = -0.01;
+scene.add(grid);
+
+// ── STL Parser ──
+function parseSTL(buffer) {
+  const dv = new DataView(buffer);
+  const isB = buffer.byteLength > 84 && new TextDecoder().decode(buffer.slice(0,5)) !== 'solid';
+  let v=[], f=[], n=[];
+
+  if (isB) {
+    const fc = dv.getUint32(80, true);
+    let o = 84;
+    for (let i=0; i<fc; i++) {
+      const v1=[dv.getFloat32(o,true),dv.getFloat32(o+4,true),dv.getFloat32(o+8,true)]; o+=12;
+      const v2=[dv.getFloat32(o,true),dv.getFloat32(o+4,true),dv.getFloat32(o+8,true)]; o+=12;
+      const v3=[dv.getFloat32(o,true),dv.getFloat32(o+4,true),dv.getFloat32(o+8,true)]; o+=12;
+      o+=2;
+      const idx=v.length/3;
+      v.push(...v1,...v2,...v3);
+      f.push(idx,idx+1,idx+2);
+    }
+  } else {
+    const txt = new TextDecoder().decode(buffer);
+    for (const line of txt.split('\n')) {
+      const p = line.trim().split(/\s+/);
+      if (p[0]==='vertex') v.push(parseFloat(p[1]),parseFloat(p[2]),parseFloat(p[3]));
+      else if (p[0]==='endfacet') n.push(0,0,1);
+    }
+    const fc = v.length/9;
+    for (let i=0;i<fc;i++) f.push(i*3,i*3+1,i*3+2);
+  }
+  return {vertices:new Float32Array(v),faces:new Uint32Array(f)};
+}
+
+function analyze(verts, faces) {
+  const numF = faces.length/3;
+  const colors = new Float32Array(verts.length);
+  const cos45 = Math.cos(45*Math.PI/180);
+  let c=0,m=0,b=0,s=0;
+
+  const adj = Array.from({length:numF},()=>[]);
+  const edgeMap = new Map();
+  const severity = [];
+
+  for (let i=0;i<numF;i++) {
+    const i0=faces[i*3]*3,i1=faces[i*3+1]*3,i2=faces[i*3+2]*3;
+    const ax=verts[i1]-verts[i0], ay=verts[i1+1]-verts[i0+1], az=verts[i1+2]-verts[i0+2];
+    const bx=verts[i2]-verts[i0], by=verts[i2+1]-verts[i0+1], bz=verts[i2+2]-verts[i0+2];
+    let nx=ay*bz-az*by, ny=az*bx-ax*bz, nz=ax*by-ay*bx;
+    const len=Math.sqrt(nx*nx+ny*ny+nz*nz);
+    if(len>0){nx/=len;ny/=len;nz/=len;}
+    const dot=nz;
+    let sev, col;
+    if(dot<-0.5){sev='crit';col=[1,0.2,0.2];c++;}
+    else if(dot<0){sev='mod';col=[1,0.53,0];m++;}
+    else if(dot<cos45){sev='bord';col=[1,0.8,0];b++;}
+    else{sev='safe';col=[0.13,0.8,0.4];s++;}
+    severity.push(sev);
+    for(let j=0;j<3;j++){const vi=faces[i*3+j]*3;colors[vi]=col[0];colors[vi+1]=col[1];colors[vi+2]=col[2];}
+    for(let e=0;e<3;e++){
+      const a=faces[i*3+e], b=faces[i*3+(e+1)%3];
+      const key=Math.min(a,b)+','+Math.max(a,b);
+      if(edgeMap.has(key)){const j=edgeMap.get(key);adj[i].push(j);adj[j].push(i);}
+      else edgeMap.set(key,i);
+    }
+  }
+
+  const vis = new Array(numF).fill(false);
+  let islands = 0;
+  for(let i=0;i<numF;i++){
+    if(!vis[i]&&severity[i]!=='safe'){
+      islands++;
+      const q=[i];vis[i]=true;
+      while(q.length){const f=q.shift();for(const nb of adj[f]){if(!vis[nb]&&severity[nb]!=='safe'){vis[nb]=true;q.push(nb);}}}
+    }
+  }
+
+  const oh=c+m+b, pct=numF>0?Math.round(oh/numF*100*10)/10:0;
+  const area=faces.length>0?(()=>{let a=0;for(let i=0;i<faces.length;i+=3){const i0=faces[i]*3,i1=faces[i+1]*3,i2=faces[i+2]*3;const ax=verts[i1]-verts[i0],ay=verts[i1+1]-verts[i0+1],az=verts[i1+2]-verts[i0+2];const bx=verts[i2]-verts[i0],by=verts[i2+1]-verts[i0+1],bz=verts[i2+2]-verts[i0+2];const cx=ay*bz-az*by,cy=az*bx-ax*bz,cz=ax*by-ay*bx;a+=Math.sqrt(cx*cx+cy*cy+cz*cz)/2;}return a;})():0;
+  const minZ=Math.min(...Array.from({length:verts.length/3},(_,i)=>verts[i*3+2]));
+  const maxZ=Math.max(...Array.from({length:verts.length/3},(_,i)=>verts[i*3+2]));
+  const sv=area*(maxZ-minZ)*0.4;
+  const uv=sv*1.5;
+  const svg=Math.round((1-sv/uv)*100);
+
+  return {colors,c,m,b,s,pct,islands,supportVol:Math.round(sv),uniformVol:Math.round(uv),savings:svg};
+}
+
+function loadModel(verts, faces) {
+  if(currentMesh){scene.remove(currentMesh);currentMesh.geometry.dispose();currentMesh.material.dispose();}
+  
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.setIndex(new THREE.BufferAttribute(faces, 1));
+  geo.computeVertexNormals();
+
+  const box = new THREE.Box3().setFromBufferAttribute(geo.attributes.position);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const pos = geo.attributes.position;
+  for(let i=0;i<pos.count;i++){pos.array[i*3]-=center.x;pos.array[i*3+1]-=center.y;pos.array[i*3+2]-=center.z;}
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+
+  const result = analyze(verts, faces);
+  geo.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
+
+  const mat = new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.4,metalness:0.3,side:THREE.DoubleSide});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  mesh.scale.set(3.5/maxDim, 3.5/maxDim, 3.5/maxDim);
+
+  scene.add(mesh); currentMesh = mesh;
+  camera.position.set(maxDim*2*3.5/maxDim, maxDim*1.5*3.5/maxDim, maxDim*2.5*3.5/maxDim);
+  controls.target.set(0,0,0); controls.update();
+
+  updateUI(verts, faces, result);
+  lastAnalysis = result;
+}
+
+function updateUI(verts, faces, r) {
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('statsContent').style.display='block';
+  document.getElementById('legend').classList.add('visible');
+  document.getElementById('vpInfo').style.display='block';
+  document.getElementById('genBtn').disabled = false;
+
+  document.getElementById('statFaces').textContent = (faces.length/3).toLocaleString();
+  document.getElementById('statIslands').textContent = r.islands;
+  document.getElementById('faceCount').textContent = (faces.length/3).toLocaleString();
+
+  document.getElementById('sevCrit').textContent = r.c;
+  document.getElementById('sevMod').textContent = r.m;
+  document.getElementById('sevBord').textContent = r.b;
+  document.getElementById('sevSafe').textContent = r.s;
+
+  const total = r.c+r.m+r.b+r.s;
+  if(total>0){
+    document.getElementById('sevBar').innerHTML = `
+      <div class="seg" style="width:${r.c/total*100}%;background:var(--critical)"></div>
+      <div class="seg" style="width:${r.m/total*100}%;background:var(--moderate)"></div>
+      <div class="seg" style="width:${r.b/total*100}%;background:var(--borderline)"></div>
+      <div class="seg" style="width:${r.s/total*100}%;background:var(--safe)"></div>`;
+  }
+
+  document.getElementById('estVolume').textContent = r.supportVol.toLocaleString()+' mm³';
+  document.getElementById('estSavings').textContent = '~'+r.savings+'%';
+}
+
+// ── File Handling ──
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', ()=>fileInput.click());
+dropZone.addEventListener('dragover', e=>{e.preventDefault();dropZone.style.borderColor='var(--accent)';dropZone.style.background='rgba(212,167,71,.05)';});
+dropZone.addEventListener('dragleave', ()=>{dropZone.style.borderColor='';dropZone.style.background='';});
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault(); dropZone.style.borderColor=''; dropZone.style.background='';
+  const f=e.dataTransfer.files[0]; if(f&&f.name.endsWith('.stl')) handleFile(f);
+});
+fileInput.addEventListener('change', e=>{if(e.target.files[0]) handleFile(e.target.files[0]);});
+
+function handleFile(file) {
+  dropZone.classList.add('hidden');
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = parseSTL(e.target.result);
+    currentStlData = {vertices: data.vertices, faces: data.faces, name: file.name};
+    loadModel(data.vertices, data.faces);
+    
+    // Save file for API calls (via FormData upload)
+    currentStlPath = file.name;
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── API ──
+async function apiPost(endpoint, data) {
+  const statusBar = document.getElementById('statusBar');
+  statusBar.className = 'status-bar info';
+  statusBar.textContent = 'Running analysis...';
+  statusBar.style.display = 'block';
+
+  try {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    const result = await resp.json();
+    if (!resp.ok) {
+      statusBar.className = 'status-bar error';
+      statusBar.textContent = result.error || 'API error';
+      return null;
+    }
+    return result;
+  } catch(e) {
+    statusBar.className = 'status-bar error';
+    statusBar.textContent = 'Connection error: is the backend running?';
+    return null;
+  }
+}
+
+// ── Generate Supports ──
+document.getElementById('genBtn').addEventListener('click', async () => {
+  if (!currentStlData) return;
+  
+  const strategy = document.getElementById('strategySelect').value;
+  const statusBar = document.getElementById('statusBar');
+  statusBar.className = 'status-bar info';
+  statusBar.textContent = '🌳 Generating tree supports... (this may take a moment)';
+  statusBar.style.display = 'block';
+  document.getElementById('genBtn').disabled = true;
+
+  // If we have the file data, save it temporarily and call the API
+  // For the browser-only version (no backend), show CLI instructions
+  const result = await apiPost('/api/optimize', {
+    stl_path: currentStlPath,
+    angle: 45,
+    strategy: strategy,
+  });
+
+  if (result && result.status === 'ok') {
+    generatedStlB64 = result.stl_base64;
+    statusBar.className = 'status-bar done';
+    statusBar.textContent = '✅ Tree supports generated! Click Download to save.';
+    document.getElementById('downloadBtn').disabled = false;
+  } else if (!result) {
+    // Backend not available — show CLI instructions
+    statusBar.className = 'status-bar info';
+    statusBar.innerHTML = '⚠️ Backend not running.<br>Generate via CLI:<br><code style="font-size:11px">supportsage tree model.stl -o optimized.stl --strategy ' + strategy + '</code>';
+  }
+  
+  document.getElementById('genBtn').disabled = false;
+});
+
+// ── Download ──
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if (!generatedStlB64) return;
+  const bytes = Uint8Array.from(atob(generatedStlB64), c => c.charCodeAt(0));
+  const blob = new Blob([bytes], {type: 'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = currentStlData ? currentStlData.name.replace('.stl', '_optimized.stl') : 'optimized.stl';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── Reset ──
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  if(currentMesh){scene.remove(currentMesh);currentMesh.geometry.dispose();currentMesh.material.dispose();currentMesh=null;}
+  currentStlData=null; currentStlPath=''; generatedStlB64=null; lastAnalysis=null;
+  document.getElementById('emptyState').style.display='';
+  document.getElementById('statsContent').style.display='none';
+  document.getElementById('legend').classList.remove('visible');
+  document.getElementById('vpInfo').style.display='none';
+  document.getElementById('genBtn').disabled=true;
+  document.getElementById('downloadBtn').disabled=true;
+  document.getElementById('statusBar').style.display='none';
+  dropZone.classList.remove('hidden');
+});
+
+// ── Resize ──
+window.addEventListener('resize', ()=>{
+  camera.aspect=viewport.clientWidth/viewport.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+});
+
+function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);}
+animate();
+
+// ── Backend health check ──
+fetch('/api/version').then(r=>r.json()).then(d=>{
+  const sb=document.getElementById('statusBar');
+  if(d.status==='ok'){
+    sb.className='status-bar done';
+    sb.innerHTML='✅ Backend connected — you can run analysis and generate supports';
+  }
+  sb.style.display='block';
+}).catch(()=>{
+  // Backend might not be running — the GUI still works for visualization
+});
+</script>
+</body>
+</html>

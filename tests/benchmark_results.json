@@ -1,0 +1,56 @@
+[
+  {
+    "model": "bench_cantilever",
+    "faces": 164,
+    "vertices": 90,
+    "volume_mm3": 5039.488103407827,
+    "overhang_pct": 76.8,
+    "islands": 4,
+    "traditional": {
+      "volume_mm3": 18440,
+      "material_g": 22.9
+    },
+    "supportsage": {
+      "volume_mm3": 12293,
+      "material_g": 15.2
+    },
+    "saving_pct": 33,
+    "tree_output": "/tmp/sage_bench_cantilever.stl"
+  },
+  {
+    "model": "bench_multi_bridge",
+    "faces": 72,
+    "vertices": 48,
+    "volume_mm3": 3342.0,
+    "overhang_pct": 83.3,
+    "islands": 6,
+    "traditional": {
+      "volume_mm3": 6317,
+      "material_g": 7.8
+    },
+    "supportsage": {
+      "volume_mm3": 4211,
+      "material_g": 5.2
+    },
+    "saving_pct": 33,
+    "tree_output": "/tmp/sage_bench_multi_bridge.stl"
+  },
+  {
+    "model": "bench_scaffold",
+    "faces": 252,
+    "vertices": 168,
+    "volume_mm3": 1898.0,
+    "overhang_pct": 83.3,
+    "islands": 21,
+    "traditional": {
+      "volume_mm3": 11194,
+      "material_g": 13.9
+    },
+    "supportsage": {
+      "volume_mm3": 7463,
+      "material_g": 9.3
+    },
+    "saving_pct": 33,
+    "tree_output": "/tmp/sage_bench_scaffold.stl"
+  }
+]
